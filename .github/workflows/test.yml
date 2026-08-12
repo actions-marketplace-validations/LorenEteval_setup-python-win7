@@ -9,9 +9,9 @@ jobs:
     continue-on-error: true
     strategy:
       matrix:
-        os: [ windows-2019, windows-2022, windows-2025, windows-latest ]
+        os: [ windows-2022, windows-2025, windows-latest ]
         arch: [ "x86", "x64" ]
-        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13", "3.14" ]
         freethreaded: [ false, true ]
         exclude:
           - python-version: "3.9"
