@@ -34,30 +34,47 @@ runs:
         Write-Host "Input version: $inputVersion"
 
         if ($inputVersion -match "^\d+\.\d+$") {
-          Write-Host "Resolving latest patch version for $inputVersion from PythonWin7..."
+          Write-Host "Resolving latest patch version for $inputVersion from repository tags..."
 
-          $url = "https://api.github.com/repos/${{ inputs.github-repo }}/contents/"
-          $headers = @{ "User-Agent" = "GitHubAction" }
-          $response = Invoke-RestMethod -Uri $url -Headers $headers
-
-          $filtered = $response | Where-Object {
-            $_.type -eq "dir" -and $_.name -match "^$inputVersion\.\d+$"
+          $headers = @{
+            "User-Agent" = "GitHubAction"
+            "Accept" = "application/vnd.github+json"
           }
 
-          if (-not $filtered) {
-            Write-Error "No matching directories found for $inputVersion"
+          $page = 1
+          $versions = @()
+
+          do {
+            $url = "https://api.github.com/repos/${{ inputs.github-repo }}/tags?per_page=100&page=$page"
+            $tags = Invoke-RestMethod -Uri $url -Headers $headers
+
+            foreach ($tag in $tags) {
+              $version = $tag.name -replace "^v", ""
+
+              if ($version -match "^$([regex]::Escape($inputVersion))\.\d+$") {
+                $versions += $version
+              }
+            }
+
+            $page++
+          }
+          while ($tags.Count -eq 100)
+
+          if (-not $versions) {
+            Write-Error "No matching tags found for Python $inputVersion"
             exit 1
           }
 
-          $versions = $filtered | ForEach-Object { $_.name }
-          $latest = $versions | Sort-Object {[version]$_} | Select-Object -Last 1
+          $latest = $versions |
+            Sort-Object { [version]$_ } |
+            Select-Object -Last 1
 
           Write-Host "Resolved Python version: $latest"
-          echo "RESOLVED_PYTHON_VERSION=$latest" >> $env:GITHUB_ENV
+          "RESOLVED_PYTHON_VERSION=$latest" >> $env:GITHUB_ENV
         }
         else {
           Write-Host "Full version provided: $inputVersion"
-          echo "RESOLVED_PYTHON_VERSION=$inputVersion" >> $env:GITHUB_ENV
+          "RESOLVED_PYTHON_VERSION=$inputVersion" >> $env:GITHUB_ENV
         }
     - name: Extract short version (e.g., 311)
       shell: bash
@@ -117,7 +134,7 @@ runs:
           set PYTHON_WIN7_HOME=%LOCALAPPDATA%\Programs\Python\Python%RESOLVED_PYTHON_SHORT_VERSION%
         )
 
-        curl -L -o %python_installer% https://github.com/${{ inputs.github-repo }}/raw/refs/heads/${{ inputs.github-repo-branch }}/%RESOLVED_PYTHON_VERSION%/%python_installer%
+        curl -L -o %python_installer% https://github.com/${{ inputs.github-repo }}/releases/download/v%RESOLVED_PYTHON_VERSION%/%python_installer%
         start /wait %python_installer% /quiet PrependPath=1 Include_launcher=1 Include_freethreaded=1
         echo PYTHON_WIN7_HOME=%PYTHON_WIN7_HOME%>>%GITHUB_ENV%
     - name: Replace python.exe with freethreaded version if applicable
